@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>LocalDrop - 局域网内容分享</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📝 LocalDrop</h1>
+            <p>局域网文本分享平台</p>
+        </header>
+
+        <div class="main-content">
+            <!-- 提交区域 -->
+            <section class="submit-section">
+                <h2>📤 提交内容</h2>
+                
+                <!-- 文本提交表单 -->
+                <div class="form-tabs">
+                    <button type="button" class="tab-btn active" data-tab="text">📝 文本</button>
+                    <button type="button" class="tab-btn" data-tab="file">📁 文件</button>
+                </div>
+                
+                <div id="textTab" class="tab-content active">
+                    <form id="messageForm" class="message-form">
+                        <div class="form-group">
+                            <label for="author">作者名称 (可选):</label>
+                            <input type="text" id="author" name="author" placeholder="输入您的名字">
+                        </div>
+                        <div class="form-group">
+                            <label for="content">文本内容:</label>
+                            <textarea id="content" name="content" rows="4" placeholder="在这里输入您要分享的文本内容..." required></textarea>
+                        </div>
+                        <button type="submit" class="submit-btn">提交文本</button>
+                    </form>
+                </div>
+                
+                <div id="fileTab" class="tab-content">
+                    <form id="fileForm" class="file-form">
+                        <div class="form-group">
+                            <label for="fileAuthor">上传者名称 (可选):</label>
+                            <input type="text" id="fileAuthor" name="uploader" placeholder="输入您的名字">
+                        </div>
+                        <div class="form-group">
+                            <label for="fileInput">选择文件:</label>
+                            <div class="file-input-wrapper">
+                                <input type="file" id="fileInput" name="file" required>
+                                <div class="file-input-display">
+                                    <span class="file-input-text">点击选择文件或拖拽文件到此处</span>
+                                    <span class="file-input-info">支持所有文件类型，最大50MB</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="submit-btn">上传文件</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- 消息列表区域 -->
+            <section class="messages-section">
+                <div class="section-header">
+                    <h2>📋 内容列表</h2>
+                    <div class="controls">
+                        <button id="copyAllBtn" class="btn">📋 复制全部</button>
+                        <button id="refreshBtn" class="btn">🔄 刷新</button>
+                        <button id="clearBtn" class="btn danger">🗑️ 清空</button>
+                    </div>
+                </div>
+                
+                <!-- 内容类型切换 -->
+                <div class="content-tabs">
+                    <button type="button" class="content-tab-btn active" data-content="messages">📝 文本消息</button>
+                    <button type="button" class="content-tab-btn" data-content="files">📁 文件</button>
+                </div>
+                
+                <!-- 文本消息列表 -->
+                <div id="messagesContainer" class="content-container active">
+                    <div class="loading">正在加载消息...</div>
+                </div>
+                
+                <!-- 文件列表 -->
+                <div id="filesContainer" class="content-container">
+                    <div class="loading">正在加载文件...</div>
+                </div>
+            </section>
+        </div>
+
+        <footer>
+            <p>💡 提示: 局域网内的所有设备都可以访问此页面并分享文本内容</p>
+            <p>⌨️ 快捷键: Ctrl+A(复制全部) | Ctrl+R(刷新) | Ctrl+Enter(提交)</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
