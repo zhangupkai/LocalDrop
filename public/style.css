@@ -449,6 +449,162 @@ textarea {
     background: #1e7e34;
 }
 
+/* 预览按钮样式 */
+.preview-btn {
+    background: #6f42c1;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    /* 触摸友好的最小尺寸 */
+    min-height: 28px;
+    min-width: 44px;
+    /* 防止移动端点击时的蓝色高亮 */
+    -webkit-tap-highlight-color: transparent;
+    /* 改善触摸响应 */
+    touch-action: manipulation;
+}
+
+.preview-btn:hover {
+    background: #5a32a3;
+}
+
+.preview-btn:active {
+    background: #4c2a8a;
+}
+
+/* 图片预览模态框 */
+.image-preview-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 防止背景滚动 */
+    overflow: hidden;
+}
+
+.image-preview-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.image-preview-container {
+    background: white;
+    border-radius: 12px;
+    max-width: 90vw;
+    max-height: 90vh;
+    width: auto;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: modalFadeIn 0.3s ease;
+    position: relative;
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.image-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #e1e5e9;
+}
+
+.image-preview-header h3 {
+    margin: 0;
+    color: #333;
+    font-size: 18px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #666;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+    background: #f5f5f5;
+    color: #333;
+}
+
+.image-preview-content {
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    position: relative;
+}
+
+.image-preview-content img {
+    max-width: calc(100vw - 100px);
+    max-height: calc(100vh - 200px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    display: block;
+    margin: auto;
+    /* 确保图片完整显示 */
+    min-width: 0;
+    min-height: 0;
+}
+
+.image-preview-actions {
+    display: flex;
+    gap: 12px;
+    padding: 20px 24px;
+    border-top: 1px solid #e1e5e9;
+    justify-content: center;
+}
+
+.image-preview-actions .copy-btn,
+.image-preview-actions .download-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+    min-width: 120px;
+}
+
 .message-item {
     padding: 15px;
     border-bottom: 1px solid #e1e5e9;
@@ -722,7 +878,7 @@ footer p {
         margin-top: 8px;
     }
     
-    .copy-btn, .delete-btn, .download-btn {
+    .copy-btn, .delete-btn, .download-btn, .preview-btn {
         padding: 6px 10px;
         font-size: 11px;
     }
@@ -749,6 +905,74 @@ footer p {
     
     .file-actions {
         gap: 6px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+    
+    .file-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .file-info {
+        width: 100%;
+        min-width: 0;
+    }
+    
+    .file-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
+    .download-btn, .delete-btn, .copy-btn, .preview-btn {
+        font-size: 11px;
+        padding: 5px 10px;
+        min-width: 42px;
+        min-height: 26px;
+    }
+    
+    /* 移动端图片预览优化 */
+    .image-preview-overlay {
+        padding: 10px;
+    }
+    
+    .image-preview-container {
+        max-width: 95vw;
+        max-height: 95vh;
+    }
+    
+    .image-preview-header {
+        padding: 15px 20px;
+    }
+    
+    .image-preview-header h3 {
+        font-size: 16px;
+    }
+    
+    .image-preview-content {
+        padding: 5px;
+        flex: 1;
+        min-height: 0;
+    }
+    
+    .image-preview-content img {
+        max-width: calc(100vw - 40px);
+        max-height: calc(100vh - 150px);
+    }
+    
+    .image-preview-actions {
+        padding: 15px 20px;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .image-preview-actions .copy-btn,
+    .image-preview-actions .download-btn {
+        padding: 12px 20px;
+        font-size: 14px;
+        min-width: auto;
+        width: 100%;
     }
     
     footer {
@@ -808,6 +1032,49 @@ footer p {
     
     .messages-container {
         max-height: 350px;
+    }
+    
+    /* 文件项移动端优化 */
+    .file-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px;
+    }
+    
+    .file-info {
+        width: 100%;
+        min-width: 0;
+    }
+    
+    .file-actions {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+    }
+    
+    .download-btn, .delete-btn, .copy-btn, .preview-btn {
+        font-size: 11px;
+        padding: 4px 8px;
+        min-width: 40px;
+        min-height: 24px;
+    }
+    
+    /* 超小屏幕图片预览优化 */
+    .image-preview-content {
+        padding: 2px;
+    }
+    
+    .image-preview-content img {
+        max-width: calc(100vw - 20px);
+        max-height: calc(100vh - 120px);
+    }
+    
+    .image-preview-container {
+        max-width: 98vw;
+        max-height: 98vh;
     }
     
     .message-item {
