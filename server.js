@@ -5,15 +5,64 @@ const path = require('path');
 const os = require('os');
 const multer = require('multer');
 const fs = require('fs');
+const readline = require('readline');
 
 const app = express();
 const PORT = 9999;
+
+// 全局错误处理
+process.on('uncaughtException', (error) => {
+    console.error('\n❌ 程序遇到未处理的异常:');
+    console.error(error.message);
+    console.error('\n详细错误信息:');
+    console.error(error.stack);
+    waitForUserInput('按任意键退出...');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('\n❌ 程序遇到未处理的 Promise 拒绝:');
+    console.error('原因:', reason);
+    waitForUserInput('按任意键退出...');
+});
+
+// 等待用户输入的辅助函数
+function waitForUserInput(message) {
+    if (process.pkg) {
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+        
+        console.log('\n' + '='.repeat(60));
+        console.log(message);
+        console.log('='.repeat(60));
+        
+        rl.question('', () => {
+            rl.close();
+            process.exit(1);
+        });
+    } else {
+        console.log(message);
+        process.exit(1);
+    }
+}
 
 // 中间件配置
 app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static('public'));
+
+// 静态文件服务
+if (process.pkg) {
+    // 在打包环境中，从 exe 内部提供静态文件
+    // pkg 会将 public 目录打包到快照中，路径为 __dirname/public
+    const publicPath = path.join(__dirname, 'public');
+    console.log(`📁 静态文件路径: ${publicPath}`);
+    app.use(express.static(publicPath));
+} else {
+    // 在开发环境中，使用项目目录
+    app.use(express.static('public'));
+}
 
 // 内存存储文本内容
 let textMessages = [];
@@ -24,9 +73,33 @@ let uploadedFiles = [];
 let fileId = 1;
 
 // 创建uploads目录
-const uploadsDir = path.join(__dirname, 'uploads');
+let uploadsDir;
+if (process.pkg) {
+    // 在打包环境中，使用 exe 文件所在目录下的 LocalDrop 文件夹
+    const exeDir = path.dirname(process.execPath);
+    uploadsDir = path.join(exeDir, 'LocalDrop', 'uploads');
+} else {
+    // 在开发环境中，使用项目目录
+    uploadsDir = path.join(__dirname, 'uploads');
+}
+
+// 确保目录存在
 if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+    try {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+        console.log(`📁 创建上传目录: ${uploadsDir}`);
+    } catch (error) {
+        console.error('❌ 无法创建上传目录:', error.message);
+        // 如果无法创建用户目录，尝试使用临时目录
+        uploadsDir = path.join(os.tmpdir(), 'LocalDrop', 'uploads');
+        try {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+            console.log(`📁 使用临时目录: ${uploadsDir}`);
+        } catch (tmpError) {
+            console.error('❌ 无法创建临时目录:', tmpError.message);
+            throw new Error('无法创建文件上传目录，请检查权限设置');
+        }
+    }
 }
 
 // 配置multer文件上传
@@ -248,12 +321,111 @@ app.delete('/api/files', (req, res) => {
     });
 });
 
+// 显示启动信息
+function showStartupInfo() {
+    console.clear();
+    console.log('══════════════════════════════════════════════════════════════');
+    console.log('                    🚀 LocalDrop 服务启动器                    ');
+    console.log('                                                              ');
+    console.log('  📝 功能: 局域网内容分享平台                                  ');
+    console.log('  🌐 支持: 文本消息分享和文件上传下载                          ');
+    console.log('  📱 兼容: 支持手机、平板、电脑等设备访问                      ');
+    console.log('                                                            ');
+    console.log('  📁 文件存储位置:');
+    if (process.pkg) {
+        const exeDir = path.dirname(process.execPath);
+        const uploadPath = path.join(exeDir, 'LocalDrop', 'uploads');
+        console.log(`     ${uploadPath.padEnd(58)} `);
+    } else {
+        console.log(`     ${uploadsDir.padEnd(58)} `);
+    }
+    console.log('                                                              ');
+    console.log('  ⚠️  注意事项:                                               ');
+    console.log('     • 确保防火墙允许 9999 端口访问                            ');
+    console.log('     • 服务重启后数据会清空（内存存储）                        ');
+    console.log('     • 文件最大支持 50MB                                      ');
+    console.log('     • 上传的文件保存在上述目录中                             ');
+    console.log('                                                              ');
+    console.log('  🎯 即将启动服务，请稍候...                                  ');
+    console.log('══════════════════════════════════════════════════════════════');
+    console.log('');
+}
+
 // 启动服务器
-app.listen(PORT, '0.0.0.0', () => {
-    const localIP = getLocalIP();
-    console.log('🚀 LocalDrop 服务已启动!');
-    console.log(`📱 本机访问: http://localhost:${PORT}`);
-    console.log(`🌐 局域网访问: http://${localIP}:${PORT}`);
-    console.log(`📝 功能: 文本分享和文件上传`);
-    console.log('按 Ctrl+C 停止服务');
-});
+function startServer() {
+    try {
+        const server = app.listen(PORT, '0.0.0.0', () => {
+            const localIP = getLocalIP();
+            console.log('══════════════════════════════════════════════════════════════');
+            console.log('                    ✅ 服务启动成功!                          ');
+            console.log('                                                              ');
+            console.log(`  📱 本机访问: http://localhost:${PORT}                        `);
+            console.log(`  🌐 局域网访问: http://${localIP}:${PORT}                     `);
+            console.log('                                                              ');
+            console.log('  💡 提示:                                                    ');
+            console.log('     • 局域网内其他设备可通过局域网地址访问                  ');
+            console.log('     • 按 Ctrl+C 停止服务                                    ');
+            console.log('     • 关闭此窗口将停止服务                                  ');
+            console.log('                                                              ');
+            console.log('  🎉 开始使用 LocalDrop 吧!                                 ');
+            console.log('══════════════════════════════════════════════════════════════');
+            console.log('');
+        });
+
+        // 处理服务器错误
+        server.on('error', (error) => {
+            if (error.code === 'EADDRINUSE') {
+                console.error('\n❌ 端口 9999 已被占用!');
+                console.error('请关闭占用该端口的程序，或修改 server.js 中的 PORT 变量。');
+            } else if (error.code === 'EACCES') {
+                console.error('\n❌ 权限不足，无法绑定端口 9999!');
+                console.error('请以管理员身份运行程序。');
+            } else {
+                console.error('\n❌ 服务器启动失败:');
+                console.error(error.message);
+            }
+            waitForUserInput('按任意键退出...');
+        });
+
+    } catch (error) {
+        console.error('\n❌ 创建服务器时发生错误:');
+        console.error(error.message);
+        waitForUserInput('按任意键退出...');
+    }
+}
+
+// 检查是否为可执行文件环境
+if (process.pkg) {
+    // 在打包后的 exe 中，显示启动信息并启动
+    try {
+        showStartupInfo();
+        setTimeout(() => {
+            try {
+                startServer();
+            } catch (error) {
+                console.error('\n❌ 启动服务器时发生错误:');
+                console.error(error.message);
+                console.error('\n可能的原因:');
+                console.error('• 端口 9999 已被其他程序占用');
+                console.error('• 防火墙阻止了程序访问网络');
+                console.error('• 权限不足');
+                console.error('\n请检查上述问题后重试。');
+                waitForUserInput('按任意键退出...');
+            }
+        }, 2000); // 等待2秒让用户看到启动信息
+    } catch (error) {
+        console.error('\n❌ 程序初始化时发生错误:');
+        console.error(error.message);
+        console.error('\n详细错误信息:');
+        console.error(error.stack);
+        waitForUserInput('按任意键退出...');
+    }
+} else {
+    // 在开发环境中，直接启动
+    try {
+        startServer();
+    } catch (error) {
+        console.error('启动失败:', error.message);
+        process.exit(1);
+    }
+}
