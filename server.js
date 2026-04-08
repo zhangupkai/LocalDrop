@@ -189,6 +189,119 @@ app.post('/api/user/nickname', (req, res) => {
     res.json({ success: true, data: { nickname } });
 });
 
+// ─── Admin state ────────────────────────────────────────────────────────────
+const adminSessions = new Map(); // token → { createdAt }
+const loginAttempts = new Map(); // ip → { count, lastAttempt }
+
+// Clean up expired login attempts every 5 minutes
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, data] of loginAttempts) {
+        if (now - data.lastAttempt > 60000) loginAttempts.delete(ip);
+    }
+}, 5 * 60 * 1000);
+
+// Admin middleware: check admin session
+app.use('/api', (req, res, next) => {
+    req.isAdmin = false;
+    const adminToken = req.cookies.adminToken;
+    if (adminToken && adminSessions.has(adminToken)) {
+        const session = adminSessions.get(adminToken);
+        if (Date.now() - new Date(session.createdAt).getTime() < config.ADMIN_SESSION_TTL) {
+            req.isAdmin = true;
+        } else {
+            adminSessions.delete(adminToken);
+            res.clearCookie('adminToken');
+        }
+    }
+    next();
+});
+
+// ─── Admin routes ───────────────────────────────────────────────────────────
+app.post('/api/admin/login', (req, res) => {
+    if (!config.ADMIN_KEY) {
+        return res.status(404).json({ success: false, message: '管理员功能未启用' });
+    }
+
+    // Rate limiting
+    const ip = req.ip;
+    const now = Date.now();
+    const attempts = loginAttempts.get(ip);
+    if (attempts) {
+        if (now - attempts.lastAttempt < 60000 && attempts.count >= 5) {
+            return res.status(429).json({ success: false, message: '尝试次数过多，请稍后再试' });
+        }
+        if (now - attempts.lastAttempt > 60000) {
+            loginAttempts.delete(ip);
+        }
+    }
+
+    const { key } = req.body;
+    if (!key || typeof key !== 'string') {
+        return res.status(400).json({ success: false, message: '请提供密钥' });
+    }
+
+    const keyBuffer = Buffer.from(key);
+    const adminBuffer = Buffer.from(config.ADMIN_KEY);
+    const valid = keyBuffer.length === adminBuffer.length &&
+        crypto.timingSafeEqual(keyBuffer, adminBuffer);
+
+    if (!valid) {
+        const entry = loginAttempts.get(ip) || { count: 0, lastAttempt: now };
+        entry.count++;
+        entry.lastAttempt = now;
+        loginAttempts.set(ip, entry);
+        return res.status(401).json({ success: false, message: '密钥错误' });
+    }
+
+    // Success — reset attempts, create session
+    loginAttempts.delete(ip);
+    const adminToken = crypto.randomUUID();
+    adminSessions.set(adminToken, { createdAt: new Date().toISOString() });
+    res.cookie('adminToken', adminToken, {
+        httpOnly: true,
+        maxAge: config.ADMIN_SESSION_TTL,
+        sameSite: 'lax',
+    });
+    res.json({ success: true, message: '管理员登录成功' });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+    const adminToken = req.cookies.adminToken;
+    if (adminToken) {
+        adminSessions.delete(adminToken);
+        res.clearCookie('adminToken');
+    }
+    res.json({ success: true, message: '已登出' });
+});
+
+app.get('/api/admin/status', (req, res) => {
+    res.json({ success: true, data: { isAdmin: req.isAdmin } });
+});
+
+app.get('/api/admin/stats', (req, res) => {
+    if (!req.isAdmin) {
+        return res.status(403).json({ success: false, message: '需要管理员权限' });
+    }
+    const totalStorage = uploadedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+    res.json({
+        success: true,
+        data: {
+            messageCount: textMessages.length,
+            fileCount: uploadedFiles.length,
+            totalStorage,
+            userCount: Object.keys(users).length,
+        }
+    });
+});
+
+// ─── Helper: strip private fields for API responses ─────────────────────────
+function sanitizeRecord(record, reqUserToken) {
+    const { ownerToken, ip, ...safe } = record;
+    safe.isOwner = ownerToken === reqUserToken;
+    return safe;
+}
+
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 // Home
@@ -198,9 +311,10 @@ app.get('/', (req, res) => {
 
 // Get all messages
 app.get('/api/messages', (req, res) => {
+    const sorted = textMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     res.json({
         success: true,
-        data: textMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        data: sorted.map(m => sanitizeRecord(m, req.userToken))
     });
 });
 
@@ -240,31 +354,30 @@ app.delete('/api/messages/:id', (req, res) => {
     const messageIndex = textMessages.findIndex(msg => msg.id === id);
 
     if (messageIndex === -1) {
-        return res.status(404).json({
-            success: false,
-            message: '消息不存在'
-        });
+        return res.status(404).json({ success: false, message: '消息不存在' });
+    }
+
+    const msg = textMessages[messageIndex];
+    if (!req.isAdmin && msg.ownerToken !== req.userToken) {
+        return res.status(403).json({ success: false, message: '无权限删除他人的消息' });
     }
 
     textMessages.splice(messageIndex, 1);
     saveMessages(textMessages);
 
-    res.json({
-        success: true,
-        message: '删除成功'
-    });
+    res.json({ success: true, message: '删除成功' });
 });
 
-// Clear all messages
+// Clear all messages (admin only)
 app.delete('/api/messages', (req, res) => {
+    if (!req.isAdmin) {
+        return res.status(403).json({ success: false, message: '需要管理员权限' });
+    }
     textMessages = [];
     messageId = 1;
     saveMessages(textMessages);
 
-    res.json({
-        success: true,
-        message: '已清空所有消息'
-    });
+    res.json({ success: true, message: '已清空所有消息' });
 });
 
 // Upload file
@@ -300,9 +413,10 @@ app.post('/api/files', upload.single('file'), (req, res) => {
 
 // Get all files
 app.get('/api/files', (req, res) => {
+    const sorted = uploadedFiles.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     res.json({
         success: true,
-        data: uploadedFiles.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        data: sorted.map(f => sanitizeRecord(f, req.userToken))
     });
 });
 
@@ -336,15 +450,15 @@ app.delete('/api/files/:id', (req, res) => {
     const fileIndex = uploadedFiles.findIndex(f => f.id === id);
 
     if (fileIndex === -1) {
-        return res.status(404).json({
-            success: false,
-            message: '文件不存在'
-        });
+        return res.status(404).json({ success: false, message: '文件不存在' });
     }
 
     const file = uploadedFiles[fileIndex];
-    const filePath = path.join(uploadsDir, file.filename);
+    if (!req.isAdmin && file.ownerToken !== req.userToken) {
+        return res.status(403).json({ success: false, message: '无权限删除他人的文件' });
+    }
 
+    const filePath = path.join(uploadsDir, file.filename);
     if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
     }
@@ -352,14 +466,14 @@ app.delete('/api/files/:id', (req, res) => {
     uploadedFiles.splice(fileIndex, 1);
     saveFiles(uploadedFiles);
 
-    res.json({
-        success: true,
-        message: '文件删除成功'
-    });
+    res.json({ success: true, message: '文件删除成功' });
 });
 
-// Clear all files
+// Clear all files (admin only)
 app.delete('/api/files', (req, res) => {
+    if (!req.isAdmin) {
+        return res.status(403).json({ success: false, message: '需要管理员权限' });
+    }
     uploadedFiles.forEach(file => {
         const filePath = path.join(uploadsDir, file.filename);
         if (fs.existsSync(filePath)) {
@@ -371,10 +485,7 @@ app.delete('/api/files', (req, res) => {
     fileId = 1;
     saveFiles(uploadedFiles);
 
-    res.json({
-        success: true,
-        message: '已清空所有文件'
-    });
+    res.json({ success: true, message: '已清空所有文件' });
 });
 
 // ─── Start server ───────────────────────────────────────────────────────────
