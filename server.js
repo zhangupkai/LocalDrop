@@ -46,11 +46,62 @@ if (!fs.existsSync(uploadsDir)) {
     }
 }
 
-// ─── In-memory storage ──────────────────────────────────────────────────────
-let textMessages = [];
-let messageId = 1;
-let uploadedFiles = [];
-let fileId = 1;
+// ─── Data persistence ───────────────────────────────────────────────────────
+const dataDir = path.join(path.dirname(uploadsDir), 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const dataFiles = {
+    messages: path.join(dataDir, 'messages.json'),
+    files: path.join(dataDir, 'files.json'),
+    users: path.join(dataDir, 'users.json'),
+};
+
+function loadJSON(filePath, fallback) {
+    try {
+        if (fs.existsSync(filePath)) {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            return JSON.parse(raw);
+        }
+    } catch (err) {
+        console.warn(`Warning: failed to load ${filePath}, using fallback. Error: ${err.message}`);
+    }
+    return fallback;
+}
+
+function createDebouncedSaver(filePath) {
+    let timer = null;
+    return function save(data) {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            const tmpPath = filePath + '.tmp';
+            const json = JSON.stringify(data, null, 2);
+            fs.writeFile(tmpPath, json, (err) => {
+                if (err) {
+                    console.error(`Failed to write ${tmpPath}:`, err.message);
+                    return;
+                }
+                fs.rename(tmpPath, filePath, (err2) => {
+                    if (err2) console.error(`Failed to rename ${tmpPath}:`, err2.message);
+                });
+            });
+        }, 500);
+    };
+}
+
+// ─── In-memory storage (loaded from disk) ───────────────────────────────────
+let textMessages = loadJSON(dataFiles.messages, []);
+let messageId = textMessages.length > 0 ? Math.max(...textMessages.map(m => m.id)) + 1 : 1;
+
+let uploadedFiles = loadJSON(dataFiles.files, []);
+let fileId = uploadedFiles.length > 0 ? Math.max(...uploadedFiles.map(f => f.id)) + 1 : 1;
+
+let users = loadJSON(dataFiles.users, {});
+
+const saveMessages = createDebouncedSaver(dataFiles.messages);
+const saveFiles = createDebouncedSaver(dataFiles.files);
+const saveUsers = createDebouncedSaver(dataFiles.users);
 
 // ─── Multer config ──────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
@@ -117,6 +168,7 @@ app.post('/api/messages', (req, res) => {
     };
 
     textMessages.push(newMessage);
+    saveMessages(textMessages);
 
     res.json({
         success: true,
@@ -138,6 +190,7 @@ app.delete('/api/messages/:id', (req, res) => {
     }
 
     textMessages.splice(messageIndex, 1);
+    saveMessages(textMessages);
 
     res.json({
         success: true,
@@ -149,6 +202,7 @@ app.delete('/api/messages/:id', (req, res) => {
 app.delete('/api/messages', (req, res) => {
     textMessages = [];
     messageId = 1;
+    saveMessages(textMessages);
 
     res.json({
         success: true,
@@ -176,6 +230,7 @@ app.post('/api/files', upload.single('file'), (req, res) => {
     };
 
     uploadedFiles.push(newFile);
+    saveFiles(uploadedFiles);
 
     res.json({
         success: true,
@@ -236,6 +291,7 @@ app.delete('/api/files/:id', (req, res) => {
     }
 
     uploadedFiles.splice(fileIndex, 1);
+    saveFiles(uploadedFiles);
 
     res.json({
         success: true,
@@ -254,6 +310,7 @@ app.delete('/api/files', (req, res) => {
 
     uploadedFiles = [];
     fileId = 1;
+    saveFiles(uploadedFiles);
 
     res.json({
         success: true,
