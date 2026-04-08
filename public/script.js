@@ -612,7 +612,6 @@ function previewImage(fileId) {
                     <img id="previewImage" src="/api/files/${fileId}/download" alt="预览图片" />
                 </div>
                 <div class="image-preview-actions">
-                    <button class="copy-btn" onclick="copyImageToClipboard(${fileId})" title="复制图片">📋 复制图片</button>
                     <button class="download-btn" onclick="downloadFile(${fileId})" title="下载图片">⬇️ 下载图片</button>
                 </div>
             </div>
