@@ -33,23 +33,96 @@ npm install
 npm run dev
 ```
 
-### 生产部署（推荐 PM2）
+### 服务器部署
+
+#### 1. 上传项目到服务器
 
 ```bash
-# 创建 .env 配置文件
-cp .env.example .env
-# 编辑 .env，至少设置 ADMIN_KEY
-# ADMIN_KEY=your-secret-key-here
+# 方式一：git clone
+git clone <repo-url> /opt/localdrop
+cd /opt/localdrop
+npm install --production
 
+# 方式二：打包上传
+# 本地打包（不含 node_modules）后上传到服务器
+scp -r ./ user@server:/opt/localdrop
+ssh user@server "cd /opt/localdrop && npm install --production"
+```
+
+#### 2. 配置环境变量
+
+```bash
+cp .env.example .env
+vi .env
+```
+
+必须配置的项：
+```bash
+ADMIN_KEY=your-secret-key-here   # 管理员密钥，多人使用时必须设置
+```
+
+可选配置：
+```bash
+PORT=9999                         # 服务端口
+UPLOADS_DIR=./uploads             # 文件存储路径
+MAX_FILE_SIZE=5368709120          # 单文件上限（默认 5GB）
+MAX_TOTAL_STORAGE=53687091200     # 总存储上限（默认 50GB）
+EXPIRE_DAYS=7                     # 内容自动过期天数
+```
+
+#### 3. 使用 PM2 启动
+
+```bash
 # 全局安装 PM2（一次性操作）
 npm install -g pm2
 
 # 启动服务
 npm run pm2:start
 
-# 设置开机自启
+# 查看运行状态
+pm2 list
+
+# 设置开机自启（按提示执行生成的命令）
 pm2 startup
 pm2 save
+```
+
+#### 4. 防火墙放行
+
+```bash
+# CentOS/RHEL
+sudo firewall-cmd --permanent --add-port=9999/tcp
+sudo firewall-cmd --reload
+
+# Ubuntu/Debian
+sudo ufw allow 9999/tcp
+```
+
+#### 5. 可选：Nginx 反向代理
+
+如需通过 80/443 端口访问或添加 HTTPS：
+
+```nginx
+server {
+    listen 80;
+    server_name localdrop.internal;
+
+    location / {
+        proxy_pass http://127.0.0.1:9999;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_cache_bypass $http_upgrade;
+
+        # SSE 必须关闭缓冲
+        proxy_buffering off;
+        proxy_read_timeout 86400s;
+    }
+
+    client_max_body_size 5g;  # 与 MAX_FILE_SIZE 一致
+}
 ```
 
 ### 访问
@@ -98,13 +171,43 @@ pm2 save
 - `Ctrl + Enter`: 在文本框中提交消息
 - `ESC`: 关闭图片预览弹窗
 
-## PM2 常用命令
+## PM2 运维手册
+
+### 常用命令
 
 ```bash
-npm run pm2:start    # 启动服务
-npm run pm2:stop     # 停止服务
-npm run pm2:restart  # 重启服务
-npm run pm2:logs     # 查看日志
+npm run pm2:start      # 启动服务
+npm run pm2:stop       # 停止服务
+npm run pm2:restart    # 重启服务
+npm run pm2:logs       # 查看实时日志
+```
+
+### 直接使用 PM2 命令
+
+```bash
+pm2 list               # 查看所有进程状态
+pm2 monit              # 实时监控（CPU/内存）
+pm2 logs localdrop     # 查看日志（Ctrl+C 退出）
+pm2 logs localdrop --lines 100  # 查看最近 100 行日志
+pm2 restart localdrop  # 重启
+pm2 reload localdrop   # 零停机重载
+pm2 delete localdrop   # 删除进程
+```
+
+### 更新部署
+
+```bash
+cd /opt/localdrop
+git pull                # 拉取最新代码
+npm install --production
+pm2 restart localdrop   # 重启生效
+```
+
+### 数据备份
+
+```bash
+# 备份持久化数据和上传文件
+tar -czf localdrop-backup-$(date +%Y%m%d).tar.gz data/ uploads/
 ```
 
 ## 技术栈
@@ -134,10 +237,9 @@ LocalDrop/
 │   ├── files.json
 │   └── users.json
 ├── uploads/               # 上传文件存储
-├── docs/                  # 文档
-│   ├── brainstorms/       # 需求探索
-│   └── plans/             # 实施计划
-└── build.js               # exe 打包脚本（历史遗留）
+└── docs/                  # 文档
+    ├── brainstorms/       # 需求探索
+    └── plans/             # 实施计划
 ```
 
 ## API 接口
