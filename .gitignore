@@ -113,3 +113,7 @@ Thumbs.db
 # Keep the directory but ignore all files except .gitkeep
 uploads/*
 !uploads/.gitkeep
+
+# Persisted data (JSON snapshots)
+data/*
+!data/.gitkeep
