@@ -22,7 +22,7 @@ const config = {
     ADMIN_SESSION_TTL: (parseInt(process.env.ADMIN_SESSION_TTL, 10) || 4) * 60 * 60 * 1000,
     MAX_FILE_SIZE: parseInt(process.env.MAX_FILE_SIZE, 10) || 5 * 1024 * 1024 * 1024,
     MAX_TOTAL_STORAGE: parseInt(process.env.MAX_TOTAL_STORAGE, 10) || 50 * 1024 * 1024 * 1024,
-    EXPIRE_DAYS: parseInt(process.env.EXPIRE_DAYS, 10) ?? 7,
+    EXPIRE_DAYS: parseInt(process.env.EXPIRE_DAYS, 10) || 7,
 };
 
 // ─── Middleware ──────────────────────────────────────────────────────────────
