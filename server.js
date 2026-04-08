@@ -419,6 +419,11 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Admin page
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 // Get all messages
 app.get('/api/messages', (req, res) => {
     const sorted = textMessages.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));

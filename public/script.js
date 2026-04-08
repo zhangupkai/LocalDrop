@@ -4,14 +4,13 @@ const fileForm = document.getElementById('fileForm');
 const messagesContainer = document.getElementById('messagesContainer');
 const filesContainer = document.getElementById('filesContainer');
 const refreshBtn = document.getElementById('refreshBtn');
-const clearBtn = document.getElementById('clearBtn');
 const copyAllBtn = document.getElementById('copyAllBtn');
 const fileInput = document.getElementById('fileInput');
 const fileInputWrapper = document.querySelector('.file-input-wrapper');
 
 // 用户身份信息
 let currentUser = { publicId: '', nickname: '' };
-let isAdmin = false;
+// isAdmin is no longer tracked in main page — admin features moved to /admin route
 
 // 防抖变量
 let fileInputClickTimeout = null;
@@ -24,9 +23,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     // 先加载用户身份
     await loadUserIdentity();
 
-    // 检查管理员状态
-    await checkAdminStatus();
-
     // 使用 SSE 实时推送替代轮询
     connectSSE();
 
@@ -37,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     initFileUpload();
 
     // 初始化管理员面板
-    initAdminPanel();
+    // Admin features moved to /admin route
 });
 
 // 加载用户身份
@@ -111,20 +107,6 @@ function showNicknameModal() {
 }
 
 // 检查管理员状态
-async function checkAdminStatus() {
-    try {
-        const response = await fetch('/api/admin/status');
-        const result = await response.json();
-
-        if (result.success && result.data.isAdmin) {
-            isAdmin = true;
-            showAdminFeatures();
-        }
-    } catch (error) {
-        console.error('检查管理员状态错误:', error);
-    }
-}
-
 // SSE 实时连接
 function connectSSE() {
     if (eventSource) {
@@ -153,146 +135,6 @@ function connectSSE() {
         // EventSource will automatically reconnect
         console.warn('SSE 连接断开，将自动重连...');
     };
-}
-
-// 显示管理员功能
-function showAdminFeatures() {
-    clearBtn.style.display = '';
-
-    const adminInfoPanel = document.getElementById('adminInfoPanel');
-    const adminLoginPanel = document.getElementById('adminLoginPanel');
-    const adminToggleBtn = document.getElementById('adminToggleBtn');
-
-    adminInfoPanel.style.display = 'block';
-    adminLoginPanel.style.display = 'none';
-    adminToggleBtn.style.display = 'none';
-
-    // 加载统计信息
-    loadAdminStats();
-}
-
-// 隐藏管理员功能
-function hideAdminFeatures() {
-    isAdmin = false;
-    clearBtn.style.display = 'none';
-
-    const adminInfoPanel = document.getElementById('adminInfoPanel');
-    const adminToggleBtn = document.getElementById('adminToggleBtn');
-
-    adminInfoPanel.style.display = 'none';
-    adminToggleBtn.style.display = '';
-
-    // 重新连接 SSE 以刷新删除按钮可见性
-    connectSSE();
-}
-
-// 加载管理员统计信息
-async function loadAdminStats() {
-    try {
-        const response = await fetch('/api/admin/stats');
-        const result = await response.json();
-
-        if (result.success) {
-            const stats = result.data;
-            const statsEl = document.getElementById('adminStats');
-            statsEl.textContent = '';
-
-            const items = [
-                { label: '消息', value: stats.messageCount },
-                { label: '文件', value: stats.fileCount },
-                { label: '存储', value: formatFileSize(stats.totalStorage) },
-                { label: '用户', value: stats.userCount }
-            ];
-
-            items.forEach(item => {
-                const span = document.createElement('span');
-                span.className = 'admin-stat-item';
-                span.textContent = item.label + ': ' + item.value;
-                statsEl.appendChild(span);
-            });
-        }
-    } catch (error) {
-        console.error('加载统计信息错误:', error);
-    }
-}
-
-// 初始化管理员面板
-function initAdminPanel() {
-    const adminToggleBtn = document.getElementById('adminToggleBtn');
-    const adminLoginPanel = document.getElementById('adminLoginPanel');
-    const adminLoginBtn = document.getElementById('adminLoginBtn');
-    const adminKeyInput = document.getElementById('adminKeyInput');
-    const adminLogoutBtn = document.getElementById('adminLogoutBtn');
-
-    // 切换管理员登录面板显示
-    adminToggleBtn.addEventListener('click', () => {
-        if (adminLoginPanel.style.display === 'none') {
-            adminLoginPanel.style.display = 'flex';
-            setTimeout(() => adminKeyInput.focus(), 100);
-        } else {
-            adminLoginPanel.style.display = 'none';
-        }
-    });
-
-    // 管理员登录
-    const handleAdminLogin = async () => {
-        const key = adminKeyInput.value.trim();
-        if (!key) {
-            showNotification('请输入管理员密钥', 'error');
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/admin/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                isAdmin = true;
-                adminKeyInput.value = '';
-                showAdminFeatures();
-                showNotification('管理员登录成功', 'success');
-                // 重新连接 SSE 以刷新删除按钮
-                connectSSE();
-            } else {
-                showNotification(result.message || '管理员密钥错误', 'error');
-            }
-        } catch (error) {
-            console.error('管理员登录错误:', error);
-            showNotification('网络错误，请稍后重试', 'error');
-        }
-    };
-
-    adminLoginBtn.addEventListener('click', handleAdminLogin);
-    adminKeyInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleAdminLogin();
-        }
-    });
-
-    // 管理员登出
-    adminLogoutBtn.addEventListener('click', async () => {
-        try {
-            const response = await fetch('/api/admin/logout', {
-                method: 'POST'
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                hideAdminFeatures();
-                showNotification('已退出管理员模式', 'success');
-            }
-        } catch (error) {
-            console.error('管理员登出错误:', error);
-            showNotification('网络错误，请稍后重试', 'error');
-        }
-    });
 }
 
 // 初始化标签页切换
@@ -563,47 +405,6 @@ refreshBtn.addEventListener('click', function() {
     connectSSE();
 });
 
-// 清空所有消息和文件（管理员功能）
-clearBtn.addEventListener('click', async function() {
-    if (confirm('确定要清空所有消息和文件吗？此操作不可恢复！')) {
-        try {
-            // 清空消息
-            const msgResponse = await fetch('/api/messages', {
-                method: 'DELETE'
-            });
-            const msgResult = await msgResponse.json();
-
-            if (msgResponse.status === 403) {
-                showNotification('无权限执行此操作', 'error');
-                return;
-            }
-
-            // 清空文件
-            const fileResponse = await fetch('/api/files', {
-                method: 'DELETE'
-            });
-            const fileResult = await fileResponse.json();
-
-            if (fileResponse.status === 403) {
-                showNotification('无权限执行此操作', 'error');
-                return;
-            }
-
-            if (msgResult.success && fileResult.success) {
-                showNotification('已清空所有内容', 'success');
-                // SSE 会自动推送更新
-                if (isAdmin) loadAdminStats();
-            } else {
-                showNotification('清空失败', 'error');
-            }
-        } catch (error) {
-            console.error('清空错误:', error);
-            showNotification('网络错误，请稍后重试', 'error');
-        }
-    }
-});
-
-
 // 显示文件列表
 function displayFiles(files) {
     if (files.length === 0) {
@@ -684,7 +485,7 @@ function displayFiles(files) {
 
         // 只有 owner 或 admin 才显示删除按钮
         const fileIsOwner = file.isOwner || (file.ownerPublicId === currentUser.publicId);
-        if (fileIsOwner || isAdmin) {
+        if (fileIsOwner ) {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-btn';
             deleteBtn.title = '删除文件';
@@ -742,7 +543,6 @@ async function deleteFile(fileId) {
             if (result.success) {
                 showNotification('文件已删除', 'success');
                 // SSE 会自动推送更新
-                if (isAdmin) loadAdminStats();
             } else {
                 showNotification('删除失败', 'error');
             }
@@ -1035,7 +835,7 @@ function displayMessages(messages) {
 
         // 只有 owner 或 admin 才显示删除按钮
         const msgIsOwner = message.isOwner || (message.ownerPublicId === currentUser.publicId);
-        if (msgIsOwner || isAdmin) {
+        if (msgIsOwner ) {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-btn';
             deleteBtn.textContent = '删除';
@@ -1125,7 +925,6 @@ async function deleteMessage(messageId) {
             if (result.success) {
                 showNotification('消息已删除', 'success');
                 // SSE 会自动推送更新
-                if (isAdmin) loadAdminStats();
             } else {
                 showNotification('删除失败', 'error');
             }
