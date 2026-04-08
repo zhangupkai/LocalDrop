@@ -27,10 +27,6 @@
                 <div id="textTab" class="tab-content active">
                     <form id="messageForm" class="message-form">
                         <div class="form-group">
-                            <label for="author">作者名称 (可选):</label>
-                            <input type="text" id="author" name="author" placeholder="输入您的名字">
-                        </div>
-                        <div class="form-group">
                             <label for="content">文本内容:</label>
                             <textarea id="content" name="content" rows="4" placeholder="在这里输入您要分享的文本内容..." required></textarea>
                         </div>
@@ -41,16 +37,12 @@
                 <div id="fileTab" class="tab-content">
                     <form id="fileForm" class="file-form">
                         <div class="form-group">
-                            <label for="fileAuthor">上传者名称 (可选):</label>
-                            <input type="text" id="fileAuthor" name="uploader" placeholder="输入您的名字">
-                        </div>
-                        <div class="form-group">
                             <label for="fileInput">选择文件:</label>
                             <div class="file-input-wrapper">
                                 <input type="file" id="fileInput" name="file" required>
                                 <div class="file-input-display">
                                     <span class="file-input-text">点击选择文件或拖拽文件到此处</span>
-                                    <span class="file-input-info">支持所有文件类型，最大50MB</span>
+                                    <span class="file-input-info">支持所有文件类型，最大5GB</span>
                                 </div>
                             </div>
                         </div>
@@ -66,7 +58,7 @@
                     <div class="controls">
                         <button id="copyAllBtn" class="btn">📋 复制全部</button>
                         <button id="refreshBtn" class="btn">🔄 刷新</button>
-                        <button id="clearBtn" class="btn danger">🗑️ 清空</button>
+                        <button id="clearBtn" class="btn danger" style="display:none;">🗑️ 清空</button>
                     </div>
                 </div>
                 
@@ -91,7 +83,30 @@
         <footer>
             <p>💡 提示: 局域网内的所有设备都可以访问此页面并分享文本内容</p>
             <p>⌨️ 快捷键: Ctrl+A(复制全部) | Ctrl+R(刷新) | Ctrl+Enter(提交)</p>
+            <div class="admin-section">
+                <button id="adminToggleBtn" class="admin-toggle-btn">管理员</button>
+                <div id="adminLoginPanel" class="admin-login-panel" style="display:none;">
+                    <input type="password" id="adminKeyInput" placeholder="输入管理员密钥" class="admin-key-input">
+                    <button id="adminLoginBtn" class="btn admin-login-btn">登录</button>
+                </div>
+                <div id="adminInfoPanel" class="admin-info-panel" style="display:none;">
+                    <div id="adminStats" class="admin-stats"></div>
+                    <button id="adminLogoutBtn" class="btn admin-logout-btn">退出管理</button>
+                </div>
+            </div>
         </footer>
+    </div>
+
+    <!-- 昵称设置模态框 -->
+    <div id="nicknameModal" class="nickname-modal" style="display:none;">
+        <div class="nickname-modal-overlay">
+            <div class="nickname-modal-content">
+                <h3>欢迎使用 LocalDrop</h3>
+                <p>请设置您的昵称，方便其他用户识别您</p>
+                <input type="text" id="nicknameInput" placeholder="输入您的昵称" class="nickname-input" maxlength="20">
+                <button id="nicknameSubmitBtn" class="submit-btn nickname-submit-btn">确认</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
