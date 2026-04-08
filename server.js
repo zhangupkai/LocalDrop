@@ -332,6 +332,61 @@ function broadcast(eventType) {
     }
 }
 
+// ─── Storage management ─────────────────────────────────────────────────────
+const activeDownloads = new Map(); // fileId → count
+
+function getTotalStorage() {
+    return uploadedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+}
+
+function cleanExpiredData() {
+    if (config.EXPIRE_DAYS <= 0) return;
+    const cutoff = Date.now() - config.EXPIRE_DAYS * 24 * 60 * 60 * 1000;
+    let messagesChanged = false;
+    let filesChanged = false;
+
+    // Clean messages
+    const beforeMsgCount = textMessages.length;
+    textMessages = textMessages.filter(m => new Date(m.timestamp).getTime() > cutoff);
+    if (textMessages.length !== beforeMsgCount) {
+        messagesChanged = true;
+        saveMessages(textMessages);
+    }
+
+    // Clean files (skip actively downloading)
+    const beforeFileCount = uploadedFiles.length;
+    const toRemove = uploadedFiles.filter(f => {
+        if (new Date(f.timestamp).getTime() > cutoff) return false;
+        if ((activeDownloads.get(f.id) || 0) > 0) return false;
+        return true;
+    });
+
+    for (const file of toRemove) {
+        const filePath = path.join(uploadsDir, file.filename);
+        if (fs.existsSync(filePath)) {
+            try { fs.unlinkSync(filePath); } catch (e) { /* ignore */ }
+        }
+    }
+
+    if (toRemove.length > 0) {
+        const removeIds = new Set(toRemove.map(f => f.id));
+        uploadedFiles = uploadedFiles.filter(f => !removeIds.has(f.id));
+        filesChanged = true;
+        saveFiles(uploadedFiles);
+    }
+
+    if (messagesChanged) broadcast('messages-updated');
+    if (filesChanged) broadcast('files-updated');
+
+    if (messagesChanged || filesChanged) {
+        console.log(`Cleanup: removed ${beforeMsgCount - textMessages.length} messages, ${toRemove.length} files`);
+    }
+}
+
+// Run cleanup on startup and every hour
+cleanExpiredData();
+setInterval(cleanExpiredData, 60 * 60 * 1000);
+
 // ─── SSE endpoint ──────────────────────────────────────────────────────────
 app.get('/api/events', (req, res) => {
     res.writeHead(200, {
@@ -438,12 +493,42 @@ app.delete('/api/messages', (req, res) => {
     res.json({ success: true, message: '已清空所有消息' });
 });
 
-// Upload file
-app.post('/api/files', upload.single('file'), (req, res) => {
+// Upload file — with quota pre-check and post-check
+function quotaPreCheck(req, res, next) {
+    const contentLength = parseInt(req.headers['content-length'], 10);
+    if (contentLength && (getTotalStorage() + contentLength > config.MAX_TOTAL_STORAGE)) {
+        return res.status(413).json({
+            success: false,
+            message: `存储空间不足。当前已用 ${formatBytes(getTotalStorage())}，上限 ${formatBytes(config.MAX_TOTAL_STORAGE)}`
+        });
+    }
+    next();
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+app.post('/api/files', quotaPreCheck, upload.single('file'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({
             success: false,
             message: '没有选择文件'
+        });
+    }
+
+    // Post-upload precise quota check
+    if (getTotalStorage() + req.file.size > config.MAX_TOTAL_STORAGE) {
+        // Over quota — delete the uploaded file
+        const filePath = path.join(uploadsDir, req.file.filename);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        return res.status(413).json({
+            success: false,
+            message: `存储空间不足。当前已用 ${formatBytes(getTotalStorage())}，上限 ${formatBytes(config.MAX_TOTAL_STORAGE)}`
         });
     }
 
@@ -499,6 +584,16 @@ app.get('/api/files/:id/download', (req, res) => {
             message: '文件已丢失'
         });
     }
+
+    // Track active downloads for cleanup protection
+    activeDownloads.set(file.id, (activeDownloads.get(file.id) || 0) + 1);
+    const onFinish = () => {
+        const count = (activeDownloads.get(file.id) || 1) - 1;
+        if (count <= 0) activeDownloads.delete(file.id);
+        else activeDownloads.set(file.id, count);
+    };
+    res.on('finish', onFinish);
+    res.on('close', onFinish);
 
     res.download(filePath, file.originalName);
 });
