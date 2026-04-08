@@ -419,6 +419,16 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Public config (non-sensitive settings for frontend display)
+app.get('/api/config', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            expireDays: config.EXPIRE_DAYS,
+        }
+    });
+});
+
 // Admin page
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));

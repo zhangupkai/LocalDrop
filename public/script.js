@@ -23,6 +23,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     // 先加载用户身份
     await loadUserIdentity();
 
+    // 加载公开配置（过期时间等）
+    loadPublicConfig();
+
     // 使用 SSE 实时推送替代轮询
     connectSSE();
 
@@ -37,6 +40,20 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 // 加载用户身份
+async function loadPublicConfig() {
+    try {
+        const response = await fetch('/api/config');
+        const result = await response.json();
+        if (result.success) {
+            const days = result.data.expireDays;
+            const hint = document.getElementById('expireHint');
+            if (hint && days > 0) {
+                hint.textContent = `上传的文本和文件将在 ${days} 天后自动清理。`;
+            }
+        }
+    } catch (e) { /* ignore */ }
+}
+
 async function loadUserIdentity() {
     try {
         const response = await fetch('/api/user');
