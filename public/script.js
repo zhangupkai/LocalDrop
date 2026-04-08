@@ -736,8 +736,8 @@ async function copyImageToClipboard(fileId) {
             throw new Error('文件不是图片类型');
         }
 
-        // 使用现代的 Clipboard API
-        if (navigator.clipboard && window.isSecureContext && navigator.clipboard.write) {
+        // 使用现代的 Clipboard API（不检查 isSecureContext，因为局域网 HTTP 下该值不可靠）
+        if (navigator.clipboard && navigator.clipboard.write) {
             try {
                 // 先尝试直接复制原始blob
                 const clipboardItem = new ClipboardItem({
