@@ -8,6 +8,7 @@ const path = require('path');
 const os = require('os');
 const multer = require('multer');
 const fs = require('fs');
+const crypto = require('crypto');
 
 const app = express();
 
@@ -134,6 +135,60 @@ function getLocalIP() {
     return 'localhost';
 }
 
+// ─── Identity middleware ─────────────────────────────────────────────────────
+function stripHtml(str) {
+    return String(str).replace(/<[^>]*>/g, '');
+}
+
+app.use('/api', (req, res, next) => {
+    let token = req.cookies.token;
+    if (!token) {
+        token = crypto.randomUUID();
+        res.cookie('token', token, {
+            httpOnly: true,
+            maxAge: 365 * 24 * 60 * 60 * 1000,
+            sameSite: 'lax',
+        });
+    }
+    if (!users[token]) {
+        users[token] = {
+            publicId: crypto.randomUUID(),
+            nickname: '',
+            createdAt: new Date().toISOString(),
+        };
+        saveUsers(users);
+    }
+    req.userToken = token;
+    req.publicId = users[token].publicId;
+    req.nickname = users[token].nickname || '匿名用户';
+    next();
+});
+
+// ─── User routes ────────────────────────────────────────────────────────────
+app.get('/api/user', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            publicId: req.publicId,
+            nickname: users[req.userToken].nickname,
+        }
+    });
+});
+
+app.post('/api/user/nickname', (req, res) => {
+    let { nickname } = req.body;
+    if (!nickname || typeof nickname !== 'string') {
+        return res.status(400).json({ success: false, message: '昵称不能为空' });
+    }
+    nickname = stripHtml(nickname.trim()).slice(0, 20);
+    if (!nickname) {
+        return res.status(400).json({ success: false, message: '昵称不能为空' });
+    }
+    users[req.userToken].nickname = nickname;
+    saveUsers(users);
+    res.json({ success: true, data: { nickname } });
+});
+
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 // Home
@@ -163,7 +218,9 @@ app.post('/api/messages', (req, res) => {
     const newMessage = {
         id: messageId++,
         content: content.trim(),
-        author: author || '匿名用户',
+        author: req.nickname,
+        ownerToken: req.userToken,
+        ownerPublicId: req.publicId,
         timestamp: new Date().toISOString(),
     };
 
@@ -225,7 +282,9 @@ app.post('/api/files', upload.single('file'), (req, res) => {
         filename: req.file.filename,
         size: req.file.size,
         mimetype: req.file.mimetype,
-        uploader: req.body.uploader || '匿名用户',
+        uploader: req.nickname,
+        ownerToken: req.userToken,
+        ownerPublicId: req.publicId,
         timestamp: new Date().toISOString(),
     };
 
