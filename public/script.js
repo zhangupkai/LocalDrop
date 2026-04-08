@@ -179,6 +179,17 @@ function initTabs() {
     const contentTabs = document.querySelectorAll('.content-tab-btn');
     const contentContainers = document.querySelectorAll('.content-container');
 
+    // 供外部调用的 tab 切换函数
+    window.switchContentTab = function(tabName) {
+        contentTabs.forEach(t => t.classList.remove('active'));
+        contentContainers.forEach(c => c.classList.remove('active'));
+        contentTabs.forEach(t => {
+            if (t.getAttribute('data-content') === tabName) t.classList.add('active');
+        });
+        if (tabName === 'messages') messagesContainer.classList.add('active');
+        else if (tabName === 'files') filesContainer.classList.add('active');
+    };
+
     contentTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const targetContent = tab.getAttribute('data-content');
@@ -258,6 +269,9 @@ messageForm.addEventListener('submit', async function(e) {
             // 清空表单
             messageForm.reset();
 
+            // 切换到文本消息 tab
+            switchContentTab('messages');
+
             // 显示成功消息（SSE 会自动推送更新）
             showNotification('消息提交成功！', 'success');
         } else {
@@ -314,6 +328,7 @@ fileForm.addEventListener('submit', function(e) {
                 fileForm.reset();
                 fileInputWrapper.classList.remove('file-selected');
                 updateFileInputDisplay('点击选择文件或拖拽文件到此处');
+                switchContentTab('files');
                 showNotification('文件上传成功！', 'success');
             } else {
                 showNotification(result.message || '上传失败', 'error');
