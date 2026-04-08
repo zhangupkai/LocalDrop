@@ -206,7 +206,8 @@ h2 {
     display: block;
 }
 
-.message-form {
+.message-form,
+.file-form {
     display: flex;
     flex-direction: column;
     gap: 20px;
@@ -799,7 +800,8 @@ footer p {
         margin-bottom: 15px;
     }
     
-    .message-form {
+    .message-form,
+    .file-form {
         gap: 15px;
     }
     
@@ -1007,7 +1009,8 @@ footer p {
         margin-bottom: 12px;
     }
     
-    .message-form {
+    .message-form,
+    .file-form {
         gap: 12px;
     }
     
