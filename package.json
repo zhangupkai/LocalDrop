@@ -8,14 +8,25 @@
     "build": "node build.js",
     "build:exe": "node build.js"
   },
-  "keywords": ["node", "http", "local", "text", "share", "file-upload", "ai-generated"],
+  "keywords": [
+    "node",
+    "http",
+    "local",
+    "text",
+    "share",
+    "file-upload",
+    "ai-generated"
+  ],
   "author": "AI Generated (Claude)",
   "description": "局域网内容分享平台 - 完全由AI生成的项目",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "body-parser": "^1.20.2",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.1",
+    "express": "^4.18.2",
+    "morgan": "^1.10.1",
     "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
