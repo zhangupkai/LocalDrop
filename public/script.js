@@ -63,6 +63,22 @@ function showNicknameModal() {
 
     const input = document.getElementById('nicknameInput');
     const submitBtn = document.getElementById('nicknameSubmitBtn');
+    const errorEl = document.getElementById('nicknameError');
+
+    function showNicknameError(msg) {
+        errorEl.textContent = msg;
+        errorEl.style.display = msg ? 'block' : 'none';
+        if (msg) input.classList.add('input-error');
+    }
+
+    function clearNicknameError() {
+        errorEl.textContent = '';
+        errorEl.style.display = 'none';
+        input.classList.remove('input-error');
+    }
+
+    // 输入时清除错误
+    input.addEventListener('input', clearNicknameError);
 
     // 聚焦输入框
     setTimeout(() => input.focus(), 100);
@@ -71,9 +87,11 @@ function showNicknameModal() {
     const handleSubmit = async () => {
         const nickname = input.value.trim();
         if (!nickname) {
-            showNotification('请输入昵称', 'error');
+            showNicknameError('请输入昵称');
+            input.focus();
             return;
         }
+        clearNicknameError();
 
         try {
             const response = await fetch('/api/user/nickname', {
@@ -89,11 +107,11 @@ function showNicknameModal() {
                 modal.style.display = 'none';
                 showNotification('昵称设置成功！', 'success');
             } else {
-                showNotification(result.message || '设置昵称失败', 'error');
+                showNicknameError(result.message || '设置昵称失败');
             }
         } catch (error) {
             console.error('设置昵称错误:', error);
-            showNotification('网络错误，请稍后重试', 'error');
+            showNicknameError('网络错误，请稍后重试');
         }
     };
 
