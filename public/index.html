@@ -47,6 +47,13 @@
                             </div>
                         </div>
                         <button type="submit" class="submit-btn">上传文件</button>
+                        <div id="uploadProgress" class="upload-progress" style="display:none;">
+                            <div class="upload-progress-bar-container">
+                                <div id="uploadProgressBar" class="upload-progress-bar"></div>
+                            </div>
+                            <span id="uploadProgressText" class="upload-progress-text"></span>
+                            <button type="button" class="upload-cancel-btn" onclick="cancelUpload()">取消</button>
+                        </div>
                     </form>
                 </div>
             </section>

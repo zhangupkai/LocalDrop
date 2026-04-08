@@ -410,35 +410,79 @@ messageForm.addEventListener('submit', async function(e) {
 });
 
 // 文件上传表单提交
-fileForm.addEventListener('submit', async function(e) {
+// ─── Upload with XHR progress ───────────────────────────────────────────────
+let activeXHR = null;
+
+function showUploadProgress() {
+    const el = document.getElementById('uploadProgress');
+    if (el) el.style.display = 'block';
+}
+function hideUploadProgress() {
+    const el = document.getElementById('uploadProgress');
+    if (el) el.style.display = 'none';
+    const bar = document.getElementById('uploadProgressBar');
+    if (bar) bar.style.width = '0%';
+    const text = document.getElementById('uploadProgressText');
+    if (text) text.textContent = '';
+    activeXHR = null;
+}
+function updateUploadProgress(percent, loaded, total) {
+    const bar = document.getElementById('uploadProgressBar');
+    if (bar) bar.style.width = percent + '%';
+    const text = document.getElementById('uploadProgressText');
+    if (text) text.textContent = formatFileSize(loaded) + ' / ' + formatFileSize(total) + ' (' + Math.round(percent) + '%)';
+}
+
+fileForm.addEventListener('submit', function(e) {
     e.preventDefault();
-
     const formData = new FormData(fileForm);
+    const xhr = new XMLHttpRequest();
+    activeXHR = xhr;
 
-    try {
-        const response = await fetch('/api/files', {
-            method: 'POST',
-            body: formData
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            // 清空表单
-            fileForm.reset();
-            fileInputWrapper.classList.remove('file-selected');
-            updateFileInputDisplay('点击选择文件或拖拽文件到此处');
-
-            // 显示成功消息（SSE 会自动推送更新）
-            showNotification('文件上传成功！', 'success');
-        } else {
-            showNotification(result.message || '上传失败', 'error');
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percent = (e.loaded / e.total) * 100;
+            updateUploadProgress(percent, e.loaded, e.total);
         }
-    } catch (error) {
-        console.error('上传错误:', error);
+    };
+
+    xhr.onload = function() {
+        hideUploadProgress();
+        try {
+            const result = JSON.parse(xhr.responseText);
+            if (result.success) {
+                fileForm.reset();
+                fileInputWrapper.classList.remove('file-selected');
+                updateFileInputDisplay('点击选择文件或拖拽文件到此处');
+                showNotification('文件上传成功！', 'success');
+            } else {
+                showNotification(result.message || '上传失败', 'error');
+            }
+        } catch (err) {
+            showNotification('上传响应解析失败', 'error');
+        }
+    };
+
+    xhr.onerror = function() {
+        hideUploadProgress();
         showNotification('网络错误，请稍后重试', 'error');
-    }
+    };
+
+    xhr.onabort = function() {
+        hideUploadProgress();
+        showNotification('上传已取消', 'info');
+    };
+
+    xhr.open('POST', '/api/files');
+    showUploadProgress();
+    xhr.send(formData);
 });
+
+function cancelUpload() {
+    if (activeXHR) {
+        activeXHR.abort();
+    }
+}
 
 // 文件选择处理
 function handleFileSelect(e) {

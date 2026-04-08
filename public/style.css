@@ -1150,6 +1150,51 @@ footer p {
     }
 }
 
+/* 上传进度条 */
+.upload-progress {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.upload-progress-bar-container {
+    flex: 1;
+    height: 8px;
+    background: #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.upload-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 4px;
+    transition: width 0.2s ease;
+    width: 0%;
+}
+
+.upload-progress-text {
+    font-size: 12px;
+    color: #666;
+    white-space: nowrap;
+    min-width: 160px;
+}
+
+.upload-cancel-btn {
+    padding: 4px 12px;
+    background: #ff6b6b;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.upload-cancel-btn:hover {
+    background: #ee5a5a;
+}
+
 /* 昵称设置模态框 */
 .nickname-modal {
     position: fixed;
