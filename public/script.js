@@ -16,6 +16,9 @@ let isAdmin = false;
 // 防抖变量
 let fileInputClickTimeout = null;
 
+// SSE 连接
+let eventSource = null;
+
 // 初始化
 document.addEventListener('DOMContentLoaded', async function() {
     // 先加载用户身份
@@ -24,18 +27,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     // 检查管理员状态
     await checkAdminStatus();
 
-    loadMessages();
-    loadFiles();
-
-    // 设置自动刷新，静默更新消息和文件
-    setInterval(() => {
-        // 只在页面可见且没有用户交互时自动刷新
-        if (!document.hidden && !isUserInteracting()) {
-            // 静默更新，不显示任何加载提示
-            loadMessagesSilently();
-            loadFilesSilently();
-        }
-    }, 5000); // 每5秒刷新一次
+    // 使用 SSE 实时推送替代轮询
+    connectSSE();
 
     // 初始化标签页切换
     initTabs();
@@ -132,6 +125,36 @@ async function checkAdminStatus() {
     }
 }
 
+// SSE 实时连接
+function connectSSE() {
+    if (eventSource) {
+        eventSource.close();
+    }
+
+    eventSource = new EventSource('/api/events');
+
+    eventSource.addEventListener('init', (e) => {
+        const data = JSON.parse(e.data);
+        displayMessages(data.messages);
+        displayFiles(data.files);
+    });
+
+    eventSource.addEventListener('messages-updated', (e) => {
+        const messages = JSON.parse(e.data);
+        displayMessages(messages);
+    });
+
+    eventSource.addEventListener('files-updated', (e) => {
+        const files = JSON.parse(e.data);
+        displayFiles(files);
+    });
+
+    eventSource.onerror = () => {
+        // EventSource will automatically reconnect
+        console.warn('SSE 连接断开，将自动重连...');
+    };
+}
+
 // 显示管理员功能
 function showAdminFeatures() {
     clearBtn.style.display = '';
@@ -159,9 +182,8 @@ function hideAdminFeatures() {
     adminInfoPanel.style.display = 'none';
     adminToggleBtn.style.display = '';
 
-    // 重新加载列表以刷新删除按钮可见性
-    loadMessagesSilently();
-    loadFilesSilently();
+    // 重新连接 SSE 以刷新删除按钮可见性
+    connectSSE();
 }
 
 // 加载管理员统计信息
@@ -234,9 +256,8 @@ function initAdminPanel() {
                 adminKeyInput.value = '';
                 showAdminFeatures();
                 showNotification('管理员登录成功', 'success');
-                // 重新加载列表以刷新删除按钮
-                loadMessagesSilently();
-                loadFilesSilently();
+                // 重新连接 SSE 以刷新删除按钮
+                connectSSE();
             } else {
                 showNotification(result.message || '管理员密钥错误', 'error');
             }
@@ -272,23 +293,6 @@ function initAdminPanel() {
             showNotification('网络错误，请稍后重试', 'error');
         }
     });
-}
-
-// 检查用户是否正在交互
-function isUserInteracting() {
-    // 检查是否有输入框获得焦点
-    const activeElement = document.activeElement;
-    if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-        return true;
-    }
-
-    // 检查是否有按钮被禁用（表示正在处理）
-    const disabledButtons = document.querySelectorAll('button:disabled');
-    if (disabledButtons.length > 0) {
-        return true;
-    }
-
-    return false;
 }
 
 // 初始化标签页切换
@@ -394,13 +398,8 @@ messageForm.addEventListener('submit', async function(e) {
             // 清空表单
             messageForm.reset();
 
-            // 显示成功消息
+            // 显示成功消息（SSE 会自动推送更新）
             showNotification('消息提交成功！', 'success');
-
-            // 立即添加新消息到列表顶部，然后静默重新加载确保数据同步
-            addNewMessageToTop(result.data);
-            // 延迟静默重新加载，让用户看到新消息
-            setTimeout(loadMessagesSilently, 1000);
         } else {
             showNotification(result.message || '提交失败', 'error');
         }
@@ -430,11 +429,8 @@ fileForm.addEventListener('submit', async function(e) {
             fileInputWrapper.classList.remove('file-selected');
             updateFileInputDisplay('点击选择文件或拖拽文件到此处');
 
-            // 显示成功消息
+            // 显示成功消息（SSE 会自动推送更新）
             showNotification('文件上传成功！', 'success');
-
-            // 重新加载文件列表
-            loadFiles();
         } else {
             showNotification(result.message || '上传失败', 'error');
         }
@@ -518,10 +514,9 @@ function formatFileSize(bytes) {
 // 复制全部消息
 copyAllBtn.addEventListener('click', copyAllMessages);
 
-// 刷新消息列表
+// 刷新消息列表（断开并重连 SSE）
 refreshBtn.addEventListener('click', function() {
-    loadMessages();
-    loadFiles();
+    connectSSE();
 });
 
 // 清空所有消息和文件（管理员功能）
@@ -552,8 +547,7 @@ clearBtn.addEventListener('click', async function() {
 
             if (msgResult.success && fileResult.success) {
                 showNotification('已清空所有内容', 'success');
-                loadMessagesSilently();
-                loadFilesSilently();
+                // SSE 会自动推送更新
                 if (isAdmin) loadAdminStats();
             } else {
                 showNotification('清空失败', 'error');
@@ -565,80 +559,6 @@ clearBtn.addEventListener('click', async function() {
     }
 });
 
-// 加载消息列表
-async function loadMessages() {
-    try {
-        // 只在没有消息时显示加载状态
-        if (messagesContainer.children.length === 0 ||
-            messagesContainer.querySelector('.empty') ||
-            messagesContainer.querySelector('.loading')) {
-            messagesContainer.innerHTML = '<div class="loading">正在加载消息...</div>';
-        }
-
-        const response = await fetch('/api/messages');
-        const result = await response.json();
-
-        if (result.success) {
-            displayMessages(result.data);
-        } else {
-            // 只在没有消息时显示错误状态
-            if (messagesContainer.children.length === 0 ||
-                messagesContainer.querySelector('.loading')) {
-                messagesContainer.innerHTML = '<div class="empty">加载失败，请刷新重试</div>';
-            }
-        }
-    } catch (error) {
-        console.error('加载错误:', error);
-        // 只在没有消息时显示错误状态
-        if (messagesContainer.children.length === 0 ||
-            messagesContainer.querySelector('.loading')) {
-            messagesContainer.innerHTML = '<div class="empty">网络错误，请检查连接</div>';
-        }
-    }
-}
-
-// 加载文件列表
-async function loadFiles() {
-    try {
-        if (filesContainer.children.length === 0 ||
-            filesContainer.querySelector('.empty') ||
-            filesContainer.querySelector('.loading')) {
-            filesContainer.innerHTML = '<div class="loading">正在加载文件...</div>';
-        }
-
-        const response = await fetch('/api/files');
-        const result = await response.json();
-
-        if (result.success) {
-            displayFiles(result.data);
-        } else {
-            if (filesContainer.children.length === 0 ||
-                filesContainer.querySelector('.loading')) {
-                filesContainer.innerHTML = '<div class="empty">加载失败，请刷新重试</div>';
-            }
-        }
-    } catch (error) {
-        console.error('加载文件错误:', error);
-        if (filesContainer.children.length === 0 ||
-            filesContainer.querySelector('.loading')) {
-            filesContainer.innerHTML = '<div class="empty">网络错误，请检查连接</div>';
-        }
-    }
-}
-
-// 静默加载文件列表
-async function loadFilesSilently() {
-    try {
-        const response = await fetch('/api/files');
-        const result = await response.json();
-
-        if (result.success) {
-            displayFiles(result.data);
-        }
-    } catch (error) {
-        console.error('静默加载文件错误:', error);
-    }
-}
 
 // 显示文件列表
 function displayFiles(files) {
@@ -719,7 +639,8 @@ function displayFiles(files) {
         actionsDiv.appendChild(downloadBtn);
 
         // 只有 owner 或 admin 才显示删除按钮
-        if (file.isOwner || isAdmin) {
+        const fileIsOwner = file.isOwner || (file.ownerPublicId === currentUser.publicId);
+        if (fileIsOwner || isAdmin) {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-btn';
             deleteBtn.title = '删除文件';
@@ -776,7 +697,7 @@ async function deleteFile(fileId) {
 
             if (result.success) {
                 showNotification('文件已删除', 'success');
-                loadFilesSilently();
+                // SSE 会自动推送更新
                 if (isAdmin) loadAdminStats();
             } else {
                 showNotification('删除失败', 'error');
@@ -1020,95 +941,6 @@ async function copyImageToClipboard(fileId) {
     }
 }
 
-// 静默加载消息（不显示任何加载提示）
-async function loadMessagesSilently() {
-    try {
-        const response = await fetch('/api/messages');
-        const result = await response.json();
-
-        if (result.success) {
-            // 静默更新消息列表，不显示任何提示
-            displayMessages(result.data);
-        }
-    } catch (error) {
-        // 静默处理错误，不显示任何提示
-        console.error('静默加载错误:', error);
-    }
-}
-
-// 立即添加新消息到列表顶部
-function addNewMessageToTop(newMessage) {
-    // 如果当前显示的是空状态，先清空
-    if (messagesContainer.querySelector('.empty')) {
-        messagesContainer.textContent = '';
-    }
-
-    // 创建新消息元素
-    const messageElement = document.createElement('div');
-    messageElement.className = 'message-item new-message';
-
-    // 消息头部
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'message-header';
-
-    const authorSpan = document.createElement('span');
-    authorSpan.className = 'message-author';
-    authorSpan.textContent = '\u{1F464} ' + (newMessage.author || currentUser.nickname || '匿名用户');
-    headerDiv.appendChild(authorSpan);
-
-    const timeSpan = document.createElement('span');
-    timeSpan.className = 'message-time';
-    timeSpan.textContent = '刚刚';
-    headerDiv.appendChild(timeSpan);
-
-    messageElement.appendChild(headerDiv);
-
-    // 消息内容
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'message-content';
-    contentDiv.title = '点击复制内容';
-    contentDiv.textContent = newMessage.content;
-    contentDiv.addEventListener('click', () => copyMessageContent(newMessage.content));
-    messageElement.appendChild(contentDiv);
-
-    // 消息操作
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'message-actions';
-
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'copy-btn';
-    copyBtn.title = '复制内容';
-    copyBtn.textContent = '\u{1F4CB} 复制';
-    copyBtn.addEventListener('click', () => copyMessageContent(newMessage.content));
-    actionsDiv.appendChild(copyBtn);
-
-    // 新提交的消息一定是自己的
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.textContent = '删除';
-    deleteBtn.addEventListener('click', () => deleteMessage(newMessage.id));
-    actionsDiv.appendChild(deleteBtn);
-
-    messageElement.appendChild(actionsDiv);
-
-    // 添加到列表顶部
-    messagesContainer.insertBefore(messageElement, messagesContainer.firstChild);
-
-    // 添加新消息的动画效果
-    messageElement.style.opacity = '0';
-    messageElement.style.transform = 'translateY(-10px)';
-    setTimeout(() => {
-        messageElement.style.transition = 'all 0.3s ease';
-        messageElement.style.opacity = '1';
-        messageElement.style.transform = 'translateY(0)';
-    }, 50);
-
-    // 3秒后移除新消息的样式类
-    setTimeout(() => {
-        messageElement.classList.remove('new-message');
-    }, 3000);
-}
-
 // 显示消息列表
 function displayMessages(messages) {
     if (messages.length === 0) {
@@ -1158,7 +990,8 @@ function displayMessages(messages) {
         actionsDiv.appendChild(copyBtn);
 
         // 只有 owner 或 admin 才显示删除按钮
-        if (message.isOwner || isAdmin) {
+        const msgIsOwner = message.isOwner || (message.ownerPublicId === currentUser.publicId);
+        if (msgIsOwner || isAdmin) {
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'delete-btn';
             deleteBtn.textContent = '删除';
@@ -1247,7 +1080,7 @@ async function deleteMessage(messageId) {
 
             if (result.success) {
                 showNotification('消息已删除', 'success');
-                loadMessagesSilently();
+                // SSE 会自动推送更新
                 if (isAdmin) loadAdminStats();
             } else {
                 showNotification('删除失败', 'error');
@@ -1357,11 +1190,11 @@ document.addEventListener('keydown', function(e) {
     const activeElement = document.activeElement;
     const isInInput = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
 
-    // Ctrl+R 或 F5 刷新消息列表（仅在非输入框时）
+    // Ctrl+R 或 F5 刷新（重连 SSE，仅在非输入框时）
     if ((e.ctrlKey && e.key === 'r') || e.key === 'F5') {
         if (!isInInput) {
             e.preventDefault();
-            loadMessagesSilently();
+            connectSSE();
         }
     }
 

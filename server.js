@@ -302,6 +302,61 @@ function sanitizeRecord(record, reqUserToken) {
     return safe;
 }
 
+// ─── SSE (Server-Sent Events) ──────────────────────────────────────────────
+const sseClients = [];
+
+function sanitizeForBroadcast(records) {
+    return records.map(({ ownerToken, ip, ...safe }) => safe);
+}
+
+function broadcast(eventType) {
+    if (sseClients.length === 0) return;
+
+    let data;
+    if (eventType === 'messages-updated') {
+        const sorted = [...textMessages].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        data = sanitizeForBroadcast(sorted);
+    } else if (eventType === 'files-updated') {
+        const sorted = [...uploadedFiles].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        data = sanitizeForBroadcast(sorted);
+    }
+
+    const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+
+    for (let i = sseClients.length - 1; i >= 0; i--) {
+        try {
+            sseClients[i].write(payload);
+        } catch (err) {
+            sseClients.splice(i, 1);
+        }
+    }
+}
+
+// ─── SSE endpoint ──────────────────────────────────────────────────────────
+app.get('/api/events', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+    });
+
+    // Send initial data
+    const sortedMessages = [...textMessages].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const sortedFiles = [...uploadedFiles].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const initPayload = {
+        messages: sanitizeForBroadcast(sortedMessages),
+        files: sanitizeForBroadcast(sortedFiles),
+    };
+    res.write(`event: init\ndata: ${JSON.stringify(initPayload)}\n\n`);
+
+    sseClients.push(res);
+
+    req.on('close', () => {
+        const idx = sseClients.indexOf(res);
+        if (idx !== -1) sseClients.splice(idx, 1);
+    });
+});
+
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 // Home
@@ -340,6 +395,7 @@ app.post('/api/messages', (req, res) => {
 
     textMessages.push(newMessage);
     saveMessages(textMessages);
+    broadcast('messages-updated');
 
     res.json({
         success: true,
@@ -364,6 +420,7 @@ app.delete('/api/messages/:id', (req, res) => {
 
     textMessages.splice(messageIndex, 1);
     saveMessages(textMessages);
+    broadcast('messages-updated');
 
     res.json({ success: true, message: '删除成功' });
 });
@@ -376,6 +433,7 @@ app.delete('/api/messages', (req, res) => {
     textMessages = [];
     messageId = 1;
     saveMessages(textMessages);
+    broadcast('messages-updated');
 
     res.json({ success: true, message: '已清空所有消息' });
 });
@@ -403,6 +461,7 @@ app.post('/api/files', upload.single('file'), (req, res) => {
 
     uploadedFiles.push(newFile);
     saveFiles(uploadedFiles);
+    broadcast('files-updated');
 
     res.json({
         success: true,
@@ -465,6 +524,7 @@ app.delete('/api/files/:id', (req, res) => {
 
     uploadedFiles.splice(fileIndex, 1);
     saveFiles(uploadedFiles);
+    broadcast('files-updated');
 
     res.json({ success: true, message: '文件删除成功' });
 });
@@ -484,6 +544,7 @@ app.delete('/api/files', (req, res) => {
     uploadedFiles = [];
     fileId = 1;
     saveFiles(uploadedFiles);
+    broadcast('files-updated');
 
     res.json({ success: true, message: '已清空所有文件' });
 });
