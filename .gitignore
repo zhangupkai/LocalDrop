@@ -117,3 +117,7 @@ uploads/*
 # Persisted data (JSON snapshots)
 data/*
 !data/.gitkeep
+
+# Local tool config
+.claude/
+mic-compound.local.md
